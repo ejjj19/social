@@ -1,0 +1,560 @@
+{% extends "network/layout.html" %}
+{% load custom_filters %}
+{% block body%}
+
+<style>
+    .bi-heart,
+    .bi-heart-fill {
+        transition: color 0.2s ease-in-out;
+        cursor: pointer;
+    }
+
+    .bi-heart:hover,
+    .bi-heart-fill:hover {
+        color: #e63946;
+    }
+
+    .like-btn:focus {
+        outline: none;
+    }
+
+    .repost-btn:focus {
+        outline: none;
+    }
+
+    .comment-btn:focus {
+        outline: none;
+    }
+
+    #edit-post-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    #edit-post-modal .bg-white {
+        max-width: 500px;
+        margin: auto;
+        padding: 20px;
+    }
+</style>
+
+
+
+{% if user.is_authenticated %}
+
+{% if messages %}
+<div class="alert">
+    {% for message in messages %}
+    <p class="alert-message">{{ message }}</p>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div>
+    <div class="relative">
+        <!-- cover -->
+        <img src="{{ profile_user.cover.url }}" alt="Cover Image" class="w-full h-96 object-cover">
+        <!-- avatar -->
+        <div class="absolute top-72 left-64 border-4 border-white rounded-lg shadow-md">
+            <img src="{{ profile_user.avatar.url }}" alt="Avatar" class="w-52 border-4 rounded-lg ">
+        </div>
+    </div>
+    <div id="sticky-header"
+        class="flex justify-between items-center w-full bg-white text-md text-gray-600 font-bold py-2 border-[1px] border-gray-300">
+        <div class="flex justify-center ml-[700px]">
+            <div class="inline-block">
+                <p class="px-4">Tweets</p>
+                <p class="text-center text-sky-500 text-lg font-bold">{{ post_count }}</p>
+            </div>
+            <div class="inline-block">
+                <p class="px-4">Following</p>
+                <p class="text-center text-sky-500 text-lg font-bold">{{ following_count }}</p>
+            </div>
+            <div class="inline-block">
+                <p class="px-4">Followers</p>
+                <p class="text-center text-sky-500 text-lg font-bold">{{ followers_count }}</p>
+            </div>
+        </div>
+        {% if is_own_profile %}
+        <div class="mr-96">
+            <button class="bg-cyan-500 py-2 px-4 text-white font-bold rounded-md">Edit Profile</button>
+        </div>
+        {% else %}
+        <div class="mr-96">
+            <form action="{% url 'follow_user' profile_user.id %}" method="post">
+                {% csrf_token %}
+                <button class="bg-cyan-500 py-2 px-4 text-white font-bold rounded-md ring:no-underline">
+                    {% if is_following %}Unfollow{% else %}Follow{% endif %}
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="flex justify-between mx-2">
+    <div class="ml-64">
+        <div class="mt-20">
+            <div>
+                <p class="text-2xl font-bold">{{ profile_user.name }}</p>
+                <p class="text-xl text-gray-500"> @{{ profile_user.username }}</p>
+            </div>
+            <div class="w-10">
+                <p>{{ profile_user.bio }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="flex justify-center ml-40">
+        <div class="bg-white m-2 border-[1px] border-gray-300 w-[600px]">
+            <div class="p-2">
+                <p class="text-lg font-bold">Tweets</p>
+            </div>
+            {% for post in posts %}
+            <div class="flex items-start space-x-2 border border-black p-2">
+                <div class="my-[3px]">
+                    <img src="{{ post.user.avatar.url }}" class="rounded-lg w-12 h-12">
+                </div>
+                <div class="my-[3px]">
+                    <div class="flex justify-start items-center">
+                        <div class="font-bold"> {{ post.user.name }} </div>
+                        <div class="text-gray-500 mx-[5px] tracking-tighter">@{{ post.user.username }}</div><span
+                            class="mx-[5px] text-gray-500">&#8226</span>
+                        <div class="text-sm text-gray-500">{{ post.created_at|time_ago_in_units }}</div>
+                    </div>
+                    <div class="py-[1px] text-lg w-[500px]">
+                        <ul>
+                            <li class="">{{ post.post }}</li>
+                        </ul>
+                    </div>
+                    <div class="flex justify-around py-2 space-x-5">
+                        <!--comment btn-->
+                        <div class="px-2">
+                            <button class="comment-btn" data-post-id="{{ post.id }}">
+                                <i class="bi bi-chat"></i>
+                            </button>
+                            <span id="comment-count-{{ post.id }}">{{ post.comments.count }}</span>
+                        </div>
+                        <!--repost btn-->
+                        <div class="px-2">
+                            <button class="repost-btn" data-post-id="{{ post.id }}">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                            <span id="repost-count-{{ post.id }}">{{ post.reposts.count }}</span>
+                        </div>
+                        <!--like btn-->
+                        <div class="px-2">
+                            <button class="like-btn" data-post-id="{{ post.id }}">
+                                <i
+                                    class="bi {% if post|user_liked_post:request.user %}bi-heart-fill text-red-500{% else %}bi-heart{% endif %}"></i>
+                            </button>
+                            <span id="like-count-{{ post.id }}">{{ post.likes.count }}</span>
+                        </div>
+
+                        <div class="post-item" id="post-{{ post.id }}">
+                            <div class="relative">
+                                <div class="post-content">{{ post.content }}</div>
+                                <button class="edit-post-btn focus:outline-none" data-post-id="{{ post.id }}">
+                                    <i class="bi bi-three-dots-vertical text-gray-600"></i>
+                                </button>
+                                <div id="dMenu-{{ post.id }}"
+                                    class="dMenu absolute right-0 mt-2 w-32 bg-white border border-gray-200 rounded-lg shadow-lg hidden">
+                                    <ul class="text-sm text-gray-700">
+                                        <!--edit-->
+                                        <li>
+                                            <button
+                                                class="edit-post-btn block px-4 py-[2px] text-gray-500 text-sm hover:bg-gray-200 hover:text-cyan-500 hover:no-underline"
+                                                data-post-id="{{ post.id }}">
+                                                Edit
+                                            </button>
+                                        </li>
+                                        <!--delete-->
+                                        <li>
+                                            <form action="{% url 'delete_post' post.id %}" method="POST"
+                                                class="delete-form">
+                                                {% csrf_token %}
+                                                <button type="submit"
+                                                    class="block px-4 py-[2px] text-gray-500 text-sm hover:bg-gray-200 hover:text-red-500 hover:no-underline">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div>
+        <div class="mr-44 bg-white border border-gray-300 rounded-lg p-4 my-4">
+            <h3 class="text-lg font-bold text-gray-700 mb-2">Suggested for You</h3>
+            <ul class="space-y-4">
+                {% for user in suggested_users %}
+                <li class="flex items-center space-x-4">
+                    <a href="{% url 'profile' user.username %}">
+                        <img src="{{ user.avatar.url }}" alt="{{ user.username }}'s avatar"
+                            class="w-10 h-10 rounded-md">
+                    </a>
+                    <div class="flex-grow">
+                        <a href="{% url 'profile' user.username %}" class="font-bold text-gray-900 hover:underline">
+                            {{ user.name }}
+                        </a>
+                        <p class="text-sm text-gray-500">@{{ user.username }}</p>
+                    </div>
+                    <form action="{% url 'follow_user' user.id %}" method="post" class="flex-shrink-0">
+                        {% csrf_token %}
+                        <button type="submit"
+                            class="bg-cyan-500 text-white text-sm px-4 py-2 rounded-lg hover:bg-cyan-600">
+                            Follow
+                        </button>
+                    </form>
+                </li>
+                {% empty %}
+                <p class="text-sm text-gray-500">No suggestions available at the moment.</p>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Edit Post Modal -->
+<div id="edit-post-modal" class="fixed inset-0 hidden bg-black bg-opacity-40 z-50 overflow-auto">
+    <div class="bg-white rounded-lg shadow-lg mx-auto mt-24 p-4 w-[500px]">
+        <button
+            class="close-edit-modal text-gray-500 text-xl font-bold float-right cursor-pointer hover:text-black focus:outline-none">
+            &times;
+        </button>
+        <h3 class="text-lg font-bold mb-2">Edit Post</h3>
+        <form method="post" id="edit-post-form">
+            {% csrf_token %}
+            <textarea name="content"
+                class="w-full h-16 resize-none border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                required>{{ post.content }}</textarea>
+            <button type="submit"
+                class="bg-cyan-500 px-4 py-2 rounded-lg text-white text-sm font-bold focus:outline-none hover:bg-cyan-600">Save
+                Changes</button>
+        </form>
+    </div>
+</div>
+
+<!-- Comment Modal -->
+<div id="comment-modal" class="fixed inset-0 hidden bg-black bg-opacity-40 z-50 overflow-auto" aria-hidden="true">
+    <div class="bg-white rounded-lg shadow-lg mx-auto mt-24 p-4 w-[500px]">
+        <button
+            class="close-comment-modal text-gray-500 text-xl font-bold float-right cursor-pointer hover:text-black focus:outline-none">
+            &times;
+        </button>
+        <h3 class="text-lg font-bold mb-2">Add a Comment</h3>
+        <form id="comment-form" class="space-y-3" onsubmit="submitComment(event)">
+            {% csrf_token %}
+            <textarea name="content" id="comment-content"
+                class="w-full h-16 resize-none border rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                placeholder="Write your comment here..." required></textarea>
+            <input type="hidden" id="comment-post-id">
+            <div class="text-right">
+                <button type="submit"
+                    class="bg-cyan-500 px-4 py-2 rounded-lg text-white text-sm font-bold focus:outline-none hover:bg-cyan-600">Post
+                    Comment</button>
+            </div>
+            <div id="comments-list" class="max-h-60 overflow-y-auto mb-3">
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const modal = document.getElementById("edit-post-modal");
+        const closeModalButton = document.querySelector(".close-edit-modal");
+        const editPostButtons = document.querySelectorAll(".edit-post-btn");
+        const editPostForm = document.getElementById("edit-post-form");
+        const textarea = editPostForm.querySelector("textarea");
+        const dropdownMenus = document.querySelectorAll('.dMenu');
+
+        editPostButtons.forEach(button => {
+            button.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const postId = button.getAttribute("data-post-id");
+                const menu = document.getElementById(`dMenu-${postId}`);
+
+                menu.classList.toggle("hidden");
+            });
+        });
+
+        window.addEventListener("click", (event) => {
+            dropdownMenus.forEach(menu => {
+                if (!menu.contains(event.target) && !event.target.classList.contains('edit-post-btn')) {
+                    menu.classList.add("hidden");
+                }
+            });
+        });
+        document.querySelectorAll(".dMenu .edit-post-btn").forEach(button => {
+            button.addEventListener("click", (e) => {
+                const postId = button.getAttribute("data-post-id");
+                const postContent = button.closest('div').querySelector('.post-content').innerText;
+
+                textarea.value = postContent;
+
+                editPostForm.action = `/post/${postId}/edit/`;
+
+                modal.style.display = "block";
+            });
+        });
+
+        closeModalButton.addEventListener("click", () => {
+            modal.style.display = "none";
+        });
+
+        window.addEventListener("click", (event) => {
+            if (event.target === modal) {
+                modal.style.display = "none";
+            }
+        });
+
+        editPostForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(editPostForm);
+
+            fetch(editPostForm.action, {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const postContentElement = document.querySelector(`#post-${data.post_id} .post-content`);
+                        postContentElement.innerText = data.content;
+
+                        modal.style.display = "none";
+                    } else {
+                        alert("There was an error updating the post.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                });
+        });
+    });
+
+
+    //comment
+    document.addEventListener("DOMContentLoaded", () => {
+        const modal = document.getElementById("comment-modal");
+        const closeModalButton = document.querySelector(".close-comment-modal");
+        const commentForm = document.getElementById("comment-form");
+        const commentContent = document.getElementById("comment-content");
+        const commentPostIdInput = document.getElementById("comment-post-id");
+        const commentsList = document.getElementById("comments-list");
+
+        document.querySelectorAll(".comment-btn").forEach(button => {
+            button.addEventListener("click", () => {
+                const postId = button.dataset.postId;
+                commentPostIdInput.value = postId;
+                loadComments(postId);
+                modal.style.display = "block";
+            });
+        });
+
+        closeModalButton.addEventListener("click", () => {
+            modal.style.display = "none";
+            commentContent.value = "";
+        });
+
+        window.addEventListener("click", (event) => {
+            if (event.target === modal) {
+                modal.style.display = "none";
+                commentContent.value = "";
+            }
+        });
+
+        function loadComments(postId) {
+            fetch(`/post/${postId}/comments/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        commentsList.innerHTML = "";
+                        data.comments.forEach(comment => {
+                            const commentDiv = document.createElement("div");
+                            commentDiv.classList.add("flex", "space-x-2", "my-2");
+                            commentDiv.innerHTML = `<strong>@${comment.username}</strong>: <span>${comment.content}</span>`;
+                            commentsList.appendChild(commentDiv);
+                        });
+                    } else {
+                        commentsList.innerHTML = "<p>No comments yet.</p>";
+                    }
+                })
+                .catch(error => console.error("Error fetching comments:", error));
+        }
+
+        commentForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const postId = commentPostIdInput.value;
+            const content = commentContent.value;
+
+            fetch(`/post/${postId}/add_comment/`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                },
+                body: JSON.stringify({ content: content })
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.success) {
+                        const newComment = document.createElement("div");
+                        newComment.classList.add("flex", "space-x-2", "my-2");
+                        newComment.innerHTML = `<strong>@${data.username}</strong>: <span>${data.comment}</span>`;
+                        commentsList.appendChild(newComment);
+                        commentContent.value = "";
+                    } else {
+                        alert("Failed to add comment");
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error:", error);
+                    alert("An error occurred while adding the comment.");
+                });
+        });
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                const cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === name + "=") {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    });
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const likeButtons = document.querySelectorAll(".like-btn");
+
+        likeButtons.forEach(button => {
+            button.addEventListener("click", () => {
+                const postId = button.dataset.postId;
+                const likeCountElement = document.getElementById(`like-count-${postId}`);
+
+                fetch(`/post/${postId}/like/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie('csrftoken')
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            button.querySelector("i").className = data.is_liked
+                                ? "bi bi-heart-fill text-red-500"
+                                : "bi bi-heart";
+                            likeCountElement.textContent = data.like_count;
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+            });
+        });
+    });
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const repostButtons = document.querySelectorAll(".repost-btn");
+
+        repostButtons.forEach(button => {
+            button.addEventListener("click", () => {
+                const postId = button.dataset.postId;
+                const repostCountElement = document.getElementById(`repost-count-${postId}`);
+                const repostContainer = document.getElementById(`repost-container-${postId}`);
+
+                fetch(`/post/${postId}/repost/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCookie('csrftoken')
+                    }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (data.action === 'added') {
+                                location.reload()
+                                button.disabled = true;  // Disable repost button to prevent further reposting
+                                repostCountElement.textContent = parseInt(repostCountElement.textContent) + 1;  // Update repost count
+
+                                // Show repost content along with the original post content
+                                repostContainer.innerHTML = `
+                            <div class="repost-content">
+                                <div class="original-post">
+                                    <p><strong>@${data.user.username}</strong> ${data.user.name}</p>
+                                    <p>${data.original_post}</p>
+                                </div>
+                                <p>Reposted: ${data.reposted_post_content}</p>
+                            </div>
+                        `;
+                            } else if (data.action === 'removed') {
+                                location.reload()
+                                button.disabled = false;  // Re-enable repost button if repost is removed
+                                repostCountElement.textContent = parseInt(repostCountElement.textContent) - 1;  // Decrease repost count
+
+                                // Hide reposted content
+                                repostContainer.innerHTML = '';
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+            });
+        });
+    });
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+</script>
+{% endif %}
+{% endblock %}
